@@ -160,7 +160,32 @@
   <div id="mealList"></div>
 
   <script src="https://raw.githack.com/eKoopmans/html2pdf/master/dist/html2pdf.bundle.js"></script>
+  <!-- ADD FIREBASE SCRIPTS HERE (new addition) -->
+<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+  <!-- Your existing script (will modify this next) -->
+<script>
+  // Initialize Firebase FIRST (add this at the VERY TOP of your script)
+  const firebaseConfig = {
+    apiKey: "AIzaSyC2d5Qc6azW9FmHIoPCIWGVPzA8Zs-2qdg",
+    authDomain: "menupedia63-9baad.firebaseapp.com",
+    projectId: "menupedia63-9baad",
+    storageBucket: "menupedia63-9baad.firebasestorage.app",
+    messagingSenderId: "862751005299",
+    appId: "1:862751005299:web:b874ba0af1843ead55a806"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // Then continue with your existing code
+  let meals = []; // Changed from localStorage to empty array
+  let customHeadings = []; // Changed from localStorage to empty array
+  let editIndex = -1;
+
+  // ... rest of your existing script ...
+</script>
   <script>
+    
     let meals = JSON.parse(localStorage.getItem("meals") || "[]");
     let customHeadings = JSON.parse(localStorage.getItem("customHeadings") || "[]");
     let editIndex = -1;
