@@ -51,8 +51,6 @@
   align-items: center;
   gap: 15px;
   position: relative;
-  /* Remove the border property completely */
-  /* border: 1px solid #ddd; <- This line should be removed */
 }
     .meal-card img {
       width: 3.25cm;
@@ -76,7 +74,6 @@
   border-bottom: 2px solid #000;
   margin: 10px 0;
   page-break-inside: avoid;
-  /* Add these properties to ensure proper alignment */
   display: block;
   max-width: 100%;
   overflow: hidden;
@@ -160,16 +157,62 @@
   <div id="mealList"></div>
 
   <script src="https://raw.githack.com/eKoopmans/html2pdf/master/dist/html2pdf.bundle.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+  
   <script>
-    let meals = JSON.parse(localStorage.getItem("meals") || "[]");
-    let customHeadings = JSON.parse(localStorage.getItem("customHeadings") || "[]");
+    // Initialize Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyC2d5Qc6azW9FmHIoPCIWGVPzA8Zs-2qdg",
+      authDomain: "menupedia63-9baad.firebaseapp.com",
+      projectId: "menupedia63-9baad",
+      storageBucket: "menupedia63-9baad.firebasestorage.app",
+      messagingSenderId: "862751005299",
+      appId: "1:862751005299:web:b874ba0af1843ead55a806"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Application Data
+    let meals = [];
+    let customHeadings = [];
     let editIndex = -1;
 
+    // DOM Elements
     const form = document.getElementById("mealForm");
     const mealSelect = document.getElementById("mealSelect");
     const headingSelect = document.getElementById("headingSelect");
     const controls = document.getElementById("controls");
 
+    // Initialize - Load data from Firestore
+    db.collection("menupedia").doc("data").get()
+      .then((doc) => {
+        if (doc.exists) {
+          const data = doc.data();
+          meals = data.meals || [];
+          customHeadings = data.headings || [];
+          renderMeals();
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading data:", error);
+        alert("Error loading menu data. Please refresh the page.");
+      });
+
+    // Save data to Firestore
+    function saveData() {
+      db.collection("menupedia").doc("data").set({
+        meals: meals,
+        headings: customHeadings
+      })
+      .then(() => console.log("Data saved successfully"))
+      .catch((error) => {
+        console.error("Error saving data:", error);
+        alert("Error saving changes. Please check your internet connection.");
+      });
+    }
+
+    // Image Preview Handler
     document.getElementById("mealPhoto").addEventListener("change", function(e) {
       const reader = new FileReader();
       reader.onload = function() {
@@ -179,6 +222,7 @@
       if (this.files[0]) reader.readAsDataURL(this.files[0]);
     });
 
+    // Form Submission Handler
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       const name = document.getElementById("mealName").value.trim();
@@ -197,6 +241,7 @@
           meals.push(meal);
         }
         renderMeals();
+        saveData(); // Save to Firestore
         resetForm();
       };
 
@@ -210,85 +255,79 @@
       }
     });
 
+    // Render all meals
     function renderMeals() {
-  meals.sort((a, b) => a.name.localeCompare(b.name));
-  const list = document.getElementById("mealList");
-  const search = document.getElementById("searchInput").value.toLowerCase();
-  list.innerHTML = "";
+      meals.sort((a, b) => a.name.localeCompare(b.name));
+      const list = document.getElementById("mealList");
+      const search = document.getElementById("searchInput").value.toLowerCase();
+      list.innerHTML = "";
 
-  const grouped = {
-    A: [],
-  };
+      const grouped = { A: [] };
 
-  // Group meals by their starting letter or by "A" if they start with a number
-  for (let meal of meals) {
-    if (
-      !meal.name.toLowerCase().includes(search) &&
-      !meal.description.toLowerCase().includes(search)
-    ) continue;
+      // Group meals by starting letter
+      for (let meal of meals) {
+        if (!meal.name.toLowerCase().includes(search) &&
+            !meal.description.toLowerCase().includes(search)) continue;
 
-    const firstLetter = meal.name[0].toUpperCase();
-    // Check if the first character is a number
-    if (/\d/.test(firstLetter)) {
-      grouped["A"].push(meal);
-    } else if (!grouped[firstLetter]) {
-      grouped[firstLetter] = [];
-      grouped[firstLetter].push(meal);
-    } else {
-      grouped[firstLetter].push(meal);
+        const firstLetter = meal.name[0].toUpperCase();
+        if (/\d/.test(firstLetter)) {
+          grouped["A"].push(meal);
+        } else if (!grouped[firstLetter]) {
+          grouped[firstLetter] = [meal];
+        } else {
+          grouped[firstLetter].push(meal);
+        }
+      }
+
+      // Render alphabet headings and meals
+      for (let letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+        if (!grouped[letter]) continue;
+
+        const header = document.createElement("div");
+        header.className = "alphabet-heading";
+        header.textContent = letter;
+        list.appendChild(header);
+
+        grouped[letter].sort((a, b) => a.name.localeCompare(b.name));
+        for (let meal of grouped[letter]) {
+          const card = document.createElement("div");
+          card.className = "meal-card";
+          card.innerHTML = `
+            <img src="${meal.photo}" alt="Meal Image"/>
+            <div class="meal-details">
+              <strong>${meal.name}</strong> ${meal.isNew ? "<span style='color: green;'>(New)</span>" : ""}<br>
+              ${meal.halfServe ? "<span class='half-serve'>Available in full serve or half serve</span>" : ""}
+              <small>${meal.description}</small><br>
+            </div>
+          `;
+          list.appendChild(card);
+        }
+      }
+
+      // Render custom headings
+      customHeadings.forEach((heading) => {
+        const header = document.createElement("div");
+        header.className = "alphabet-heading";
+        header.textContent = heading;
+        list.appendChild(header);
+      });
+
+      updateMealSelect();
+      updateHeadingSelect();
     }
-  }
 
-  // Render alphabet headings
-  for (let letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-    if (!grouped[letter]) continue;
-
-    const header = document.createElement("div");
-    header.className = "alphabet-heading";
-    header.textContent = letter;
-    list.appendChild(header);
-
-    // Render meals under the corresponding letter
-    grouped[letter].sort((a, b) => a.name.localeCompare(b.name));
-    for (let meal of grouped[letter]) {
-      const card = document.createElement("div");
-      card.className = "meal-card";
-      card.innerHTML = `
-        <img src="${meal.photo}" alt="Meal Image"/>
-        <div class="meal-details">
-          <strong>${meal.name}</strong> ${meal.isNew ? "<span style='color: green;'>(New)</span>" : ""}<br>
-          ${meal.halfServe ? "<span class='half-serve'>Available in full serve or half serve</span>" : ""}
-          <small>${meal.description}</small><br>
-        </div>
-      `;
-      list.appendChild(card);
-    }
-  }
-
-  // Render custom headings
-  customHeadings.forEach((heading) => {
-    const header = document.createElement("div");
-    header.className = "alphabet-heading";
-    header.textContent = heading;
-    list.appendChild(header);
-  });
-
-  updateMealSelect();
-  updateHeadingSelect();
-  localStorage.setItem("meals", JSON.stringify(meals));
-  localStorage.setItem("customHeadings", JSON.stringify(customHeadings));
-}
-
-     
+    // Add custom heading
     function addCustomHeading() {
       const customHeading = document.getElementById("customHeadingInput").value.trim();
       if (customHeading) {
         customHeadings.push(customHeading);
         renderMeals();
+        saveData(); // Save to Firestore
         document.getElementById("customHeadingInput").value = "";
       }
     }
 
+    // Update meal dropdown
     function updateMealSelect() {
       mealSelect.innerHTML = '<option value="">Select Meal to Edit/Delete</option>';
       meals.forEach((meal, index) => {
@@ -299,6 +338,7 @@
       });
     }
 
+    // Update heading dropdown
     function updateHeadingSelect() {
       headingSelect.innerHTML = '<option value="">Select Heading to Edit/Delete</option>';
       customHeadings.forEach((heading, index) => {
@@ -309,6 +349,7 @@
       });
     }
 
+    // Edit selected heading
     function editSelectedHeading() {
       const selectedIndex = headingSelect.value;
       if (selectedIndex === "") return;
@@ -317,17 +358,21 @@
       if (newHeading) {
         customHeadings[selectedIndex] = newHeading;
         renderMeals();
+        saveData(); // Save to Firestore
       }
     }
 
+    // Delete selected heading
     function deleteSelectedHeading() {
       const selectedIndex = headingSelect.value;
       if (selectedIndex === "") return;
 
       customHeadings.splice(selectedIndex, 1);
       renderMeals();
+      saveData(); // Save to Firestore
     }
 
+    // Populate form from selected meal
     function populateFormFromSelection() {
       const selectedMealIndex = mealSelect.value;
       if (selectedMealIndex === "") return;
@@ -338,96 +383,74 @@
       document.getElementById("isNewMeal").checked = meal.isNew;
       document.getElementById("halfServe").checked = meal.halfServe;
       editIndex = selectedMealIndex;
+      
+      // Show existing photo if available
+      if (meal.photo) {
+        document.getElementById("previewImage").src = meal.photo;
+        document.getElementById("previewImage").style.display = "block";
+      }
     }
 
+    // Delete selected meal
     function deleteSelectedMeal() {
       const selectedMealIndex = mealSelect.value;
       if (selectedMealIndex === "") return;
 
       meals.splice(selectedMealIndex, 1);
       renderMeals();
+      saveData(); // Save to Firestore
       resetForm();
     }
 
+    // Reset form
     function resetForm() {
       form.reset();
       editIndex = -1;
       document.getElementById("previewImage").style.display = "none";
+      mealSelect.value = "";
     }
 
+    // Export to PDF
     function exportPDF() {
-  // Hide elements that shouldn't be in the PDF
-  const controlsDisplay = controls.style.display;
-  const searchBarDisplay = document.querySelector('.search-bar').style.display;
-  
-  controls.style.display = 'none';
-  document.querySelector('.search-bar').style.display = 'none';
-  
-  // Get the element to convert
-  const element = document.getElementById("mealList");
-  
-  // Create a footer with page numbers
-  const pageCount = {
-    pagesNumber: 0,
-    count: function() { this.pagesNumber++; return this.pagesNumber; }
-  };
-  
-  // Configure PDF export options with page numbers
-  const opt = {
-    margin: [10, 10, 20, 10], // Top, right, bottom, left - extra bottom margin for page numbers
-    filename: 'menu.pdf',
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { 
-      scale: 2,
-      useCORS: true,
-      scrollX: 0,
-      scrollY: 0
-    },
-    jsPDF: { 
-      unit: 'mm', 
-      format: 'a4', 
-      orientation: 'portrait',
-      putOnlyUsedFonts: true
-    },
-    pagebreak: { mode: ['avoid-all'] },
-    footer: {
-      height: '10mm',
-      contents: {
-        default: function(currentPage, pageCount) {
-          return `<div style="text-align: center; font-size: 10pt; color: #444;">Page ${currentPage} of ${pageCount}</div>`;
-        }
-      }
-    }
-  };
-  
-  // Generate PDF with page numbers
-  html2pdf()
-    .from(element)
-    .set(opt)
-    .toPdf()
-    .get('pdf')
-    .then(pdf => {
-      // Get total page count
-      const totalPages = pdf.internal.getNumberOfPages();
+      const controlsDisplay = controls.style.display;
+      const searchBarDisplay = document.querySelector('.search-bar').style.display;
       
-      // Add page numbers to each page
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(10);
-        pdf.setTextColor(100);
-        pdf.text(`Page ${i} of ${totalPages}`, pdf.internal.pageSize.getWidth() / 2, pdf.internal.pageSize.getHeight() - 10, {
-          align: 'center'
+      controls.style.display = 'none';
+      document.querySelector('.search-bar').style.display = 'none';
+      
+      const element = document.getElementById("mealList");
+      
+      const opt = {
+        margin: [10, 10, 20, 10],
+        filename: 'menu.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait',
+          putOnlyUsedFonts: true
+        },
+        pagebreak: { mode: ['avoid-all'] }
+      };
+      
+      html2pdf()
+        .from(element)
+        .set(opt)
+        .save()
+        .then(() => {
+          controls.style.display = controlsDisplay;
+          document.querySelector('.search-bar').style.display = searchBarDisplay;
         });
-      }
-    })
-    .save()
-    .then(() => {
-      // Restore elements
-      controls.style.display = controlsDisplay;
-      document.querySelector('.search-bar').style.display = searchBarDisplay;
-    });
-}
-    renderMeals(); 
+    }
+
+    // Initial render
+    renderMeals();
   </script>
 </body>
 </html>
